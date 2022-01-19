@@ -1,0 +1,13 @@
+name: WorkingAndHappiness
+title: WorkingAndHappiness
+username:
+account: akippenhan
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 4067427
+bundleId: 4565635
+url: https://akippenhan.shinyapps.io/WorkingAndHappiness/
+when: 1620312380.48564
+lastSyncTime: 1620312380.48567
+asMultiple: FALSE
+asStatic: FALSE

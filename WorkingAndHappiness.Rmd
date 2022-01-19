@@ -1,0 +1,454 @@
+---
+title: 'Working and Happiness'
+author: 'Adam Kippenhan'
+date: 'May 4, 2021'
+output:
+     html_document:
+          toc: True
+          toc_depth: 4
+          toc_float: true
+          toc_collapsed: true
+          theme: journal
+          code_folding: hide
+runtime: shiny
+---
+
+<!--- change font size for headers and body --->
+
+<style>
+.main-container {
+  max-width: 2000px !important;
+  margin-left: auto;
+  margin-right: auto;
+}
+h1.title {
+  font-size: 48px;
+}
+h1 {
+  font-size: 36px;
+}
+h2 {
+  font-size: 28px;
+}
+h3 { 
+  font-size: 24px;
+}
+h4.author {
+  font-size: 36px;
+}
+h4.date {
+  font-size: 36px;
+}
+body {
+  font-size: 18px;
+}
+</style>
+
+# Introduction
+
+How much time do different people around the world spend working? How happy are people around the world? How might the time people spend working be related to their happiness? In this article, I am going to attempt to answer these questions. I am going to look into some data from both the [Organisation for Economic Co-operation and Development](https://www.oecd.org/) (OECD) and the [World Happiness Report](https://worldhappiness.report/) to attempt to see what the data has to say on these questions. According to the [2017 World Happiness Report](https://s3.amazonaws.com/happiness-report/2017/HR17-Ch6_wAppendix.pdf), work-life balance is one of the most important factors in determining happiness. Therefore, it may be possible to predict happiness based on time spent working. It should be noted that since happiness it very subjective and difficult to quantify, it is most likely impossible to be able to soundly predict all the factors that correlate to happiness as they can vary depending on the person and their location, gender or culture. There are also obviously many other job and non-job related factors that can contribute to happiness. In this article, I will do a deep dive into the data about time spent working from 37 different countries around the world and data from the World Happiness Report for the same countries and see how time spent working might be related to overall happiness as well as other important happiness-related measures that the World Happiness Report keeps track of such as freedom, healthy life expectancy and generosity. The source code for data ingest and cleaning as well as creation of all plots in this article is available using the `Code` buttons on the right side of this article.
+
+```{r dataIngestAndCleaning, echo=TRUE, message=FALSE, warning=FALSE}
+library(tidyverse)
+
+# read in the OECD data on time spent working per country, remove duplicate employment type data for applicable countries, select data concerning country name, year and working time only, remove Turkey as it has NAs and rename applicable columns
+workData=read.csv('data/ANHRS_21042021234045409.csv') %>% distinct(`Country`, `Time`, .keep_all=TRUE) %>%
+                                                          select(2,8,15) %>% 
+                                                          filter(`Country`!='Turkey') %>% 
+                                                          rename(`AvgHrsWorked`=`Value`,
+                                                                 `Year`=`Time`)
+# adjust country names to match in both dataframes
+workData$Country[workData$Country=='Korea'] <- 'South Korea'
+workData$Country[workData$Country=='Russian Federation'] <- 'Russia'
+workData$Country[workData$Country=='Slovak Republic'] <- 'Slovakia'
+
+# make a dataframe for each relevant year in workData
+workData %>% filter(`Year`==2015) -> workData2015
+workData %>% filter(`Year`==2016) -> workData2016
+workData %>% filter(`Year`==2017) -> workData2017
+workData %>% filter(`Year`==2018) -> workData2018
+workData %>% filter(`Year`==2019) -> workData2019
+
+# read in World Happiness Report data from 2015 to 2019, filter for countries in the workData dataframe and select columns with relevant data
+happinessData2015=read.csv('data/2015.csv') %>% filter(`Country` %in% workData$Country) %>%
+                                                select(1,2,3,4,8,9,11)
+happinessData2015$Year=2015 # add a Year column to specify the year of the data for animation purposes
+
+happinessData2016=read.csv('data/2016.csv') %>% filter(`Country` %in% workData$Country) %>%
+                                                select(1,2,3,4,9,10,12)  
+happinessData2016$Year=2016 # add a Year column to specify the year of the data for animation purposes
+
+happinessData2017=read.csv('data/2017.csv') %>% filter(`Country` %in% workData$Country) 
+happinessData2017$Year=2017 # add a Year column to specify the year of the data for animation purposes
+
+# create a regions dataframe to allow for regions in happiness data for 2017 to 2019
+regions=happinessData2016 %>% select(1,2)
+
+happinessData2017 <- inner_join(regions, happinessData2017, by='Country') 
+happinessData2017 %>% select(1,2,3,4,9,10,11,14) -> happinessData2017
+
+happinessData2018=read.csv('data/2018.csv') %>% filter(`Country.or.region` %in% workData$Country) %>%
+                                                rename(`Happiness.Rank`=`Overall.rank`,
+                                                       `Country`=`Country.or.region`,                
+                                                       `Happiness.Score`=`Score`,
+                                                       `Health..Life.Expectancy.`=`Healthy.life.expectancy`,             
+                                                       `Freedom`=`Freedom.to.make.life.choices`)              
+happinessData2018$Year=2018 # add a Year column to specify the year of the data for animation purposes
+happinessData2018 <- inner_join(regions, happinessData2018, by='Country') 
+happinessData2018 %>% select(1,2,3,4,7,8,9,11) -> happinessData2018
+
+happinessData2019=read.csv('data/2019.csv') %>% filter(`Country.or.region` %in% workData$Country) %>%
+                                                rename(`Happiness.Rank`=`Overall.rank`,
+                                                       `Country`=`Country.or.region`, 
+                                                       `Happiness.Score`=`Score`,
+                                                       `Health..Life.Expectancy.`=`Healthy.life.expectancy`,
+                                                       `Freedom`=`Freedom.to.make.life.choices`)                        
+happinessData2019$Year=2019 # add a Year column to specify the year of the data for animation purposes
+happinessData2019 <- inner_join(regions, happinessData2019, by='Country') 
+happinessData2019 %>% select(1,2,3,4,7,8,9,11) -> happinessData2019
+
+# join the work and happiness dataframe together for each year by Country
+workAndHappinessData2015 <- inner_join(workData2015, happinessData2015, by='Country') %>% select(-2) %>%
+                                                                                          rename(`Year`=`Year.y`)
+workAndHappinessData2016 <- inner_join(workData2016, happinessData2016, by='Country') %>% select(-2) %>%
+                                                                                          rename(`Year`=`Year.y`)
+workAndHappinessData2017 <- inner_join(workData2017, happinessData2017, by='Country') %>% select(-2) %>%
+                                                                                          rename(`Year`=`Year.y`)
+workAndHappinessData2018 <- inner_join(workData2018, happinessData2018, by='Country') %>% select(-2) %>%
+                                                                                          rename(`Year`=`Year.y`)
+workAndHappinessData2019 <- inner_join(workData2019, happinessData2019, by='Country') %>% select(-2) %>%
+                                                                                          rename(`Year`=`Year.y`)
+
+# bind work and happiness dataframes for each year into one dataframe and move AvgHrsWorked column to position 3 using dplyr::relocate
+workAndHappinessData <- bind_rows(workAndHappinessData2015, 
+                                  workAndHappinessData2016, 
+                                  workAndHappinessData2017, 
+                                  workAndHappinessData2018, 
+                                  workAndHappinessData2019) %>% relocate(`AvgHrsWorked`, .after=3)
+# round the time spent working column to integers
+workAndHappinessData$AvgHrsWorked <- round(workAndHappinessData$AvgHrsWorked)
+```
+
+# Time Spent Working
+
+First we are going to look at some [data](https://stats.oecd.org/index.aspx?DataSetCode=ANHRS) about the average annual time spent working per country which was collected by the [OECD](https://www.oecd.org/). For 24 of these countries, 
+Austria, Belgium, Canada, the Czech Republic, Denmark, Finland, France, Germany, Greece, Hungary, Ireland, Israel, Italy, Korea, Latvia, Luxembourg,  the Netherlands, Norway, Portugal, the Slovak Republic, Slovenia, Spain, Sweden and Switzerland, the data was obtained from the OECD according to National Accounts. The data for the remaining countries were collected from the [European Union Labour Force Survey](https://ec.europa.eu/eurostat/web/microdata/european-union-labour-force-survey) as well as the [International Labour Organization Labour Force Survey](https://www.ilo.org/dyn/lfsurvey/lfsurvey.list?p_lang=en). The data is calculated by taking the total number of hours worked over the year divided by the average number of part-time and full-time workers in employment and is measured in hours. For the purposes of this article, the country Turkey was removed from the data used here as it is missing data for the time-frame between 2014 and 2019, part of which will be used later to combine with data from the World Happiness Report. 
+
+## How does Time Spent Working Differ Between Countries?
+
+The bar plot below shows these data by country and over time between the years 2000 and 2019. As can be seen from the plot, the countries that spend the least time working are generally found in Western Europe and include countries such as Denmark, Germany, the Netherlands and Sweden while the countries that spend the most time working can be found in Latin America and the Caribbean and include countries such as Mexico, Costa Rica and Chile. Each bar is colored by the world region its corresponding country belongs to as specified in the legend to the right of the plot. Selecting each region in the legend will hide the bars for that region in the plot and double-clicking the region in the legend will isolate countries from that region in the plot. Hovering over each bar will also reveal the exact value of annual time spent working for the corresponding country. Data for South Korea is not available until 2008 as is reflected in the plot below. Data for different years between 2000 and 2019 can be viewed using the slider or the play button below the plot.
+
+``` {r workingTimePlot, echo=TRUE, message=FALSE, warning=FALSE, fig.width=12, fig.height=8}
+library(plotly)
+
+# remove OECD countries data
+workData %>% filter(`Country`!='OECD countries') -> workData
+# join the regions dataframe to the workData dataframe
+workData <- inner_join(regions, workData, by='Country')
+
+workData <- workData[order(workData$AvgHrsWorked),] # sort the workData dataframe by AvgHrsWorked
+
+workingTimePlot <- workData %>% 
+  plot_ly(
+    x=~`AvgHrsWorked`, # select x-axis data
+    y=~`Country`, # select y-axis data
+    color=~`Region`, # color each bar by the region corresponding to the country it represents
+    frame=~`Year`, # animate plot by year from 2000 to 2019
+    text=~paste(`AvgHrsWorked`, ' hrs'), # allow the exact working hours value to be identified when hovering over each bar
+    hoverinfo='text',
+    type='bar', # specify the type of plot
+    height=800, # specify the plot height so all country names are shown
+    orientation='h') %>% # specify horizontal orientation for the plot
+      layout(title='<b>Average Annual Time Spent Working per Country<b>',
+             xaxis=list(title='Average Annual Time Spent Working (hours)'), # add title for x axis
+             yaxis=list(title='', # y-axis has a blank title
+                        categoryarray=~`AvgHrsWorked`, 
+                        categoryorder='array'),
+             legend=list(title=list(text='<b>Region</b>'), # "<b>" is used to bold the text) 
+                         traceorder='reversed')) # reverse the legend's trace order to match the order of the bars
+workingTimePlot
+```
+
+Below is the same data as presented in the above bar plot in the form of a map. As stated in the legend, higher average annual time spent working is denoted by a more red color where a lower value is denoted by a more blue color. Countries where data is not available are colored gray. As seen in the bar plot the countries that work the least are generally found in Western Europe and Scandinavia while the countries that work the most are found in Latin America and the Caribbean. The map below is also interactive: using the slider at the bottom of the plot, the year can be changed to see data between 2000 and 2019. You may need to scroll down on the map to see it.
+
+```{r workingTimeMap, echo=TRUE, message=FALSE, warning=FALSE, fig.width=12, fig.height=8}
+library(maps)
+
+world <- map_data('world') %>% filter(`region`!='Antarctica') # remove Antarctica from the map
+world$region[world$region=='USA'] <- 'United States' # adjust country names to match in both dataframes
+world$region[world$region=='UK'] <- 'United Kingdom'    
+
+worldBase <- ggplot() + geom_map(data=world, map=world, aes(x=`long`, y=`lat`, map_id=`region`, group=`group`), fill='lightgray', color='black') # create a base map of the world
+
+world %>% filter(`region` %in% workData$Country) %>% rename(`Country`=`region`) %>% select(-6) -> world # filter for only countries in workData, rename region column to Country and remove subregion column
+workDataMap <- inner_join(workData, world, by='Country') # join the workData and world dataframes together by Country
+
+# this code is run in the hidden shiny_ui code chunk
+# worldBase + geom_polygon(data=workDataMapReactive, aes(x=`long`, y=`lat`, group=group, fill=`AvgHrsWorked`)) + 
+#                          scale_fill_continuous(name='Average Annual Time\nSpent Working (hours)', low='blue',
+#                                                high='red', na.value='gray50',) + 
+#                          labs(title='Average Annual Time Spent Working per Country') +
+#                          theme(plot.title=element_text(size=20), # increase text size of map title
+#                                legend.title=element_text(size=16), # increase text size of map legend title
+#                                legend.text=element_text(size=14), # increase text size of map legend
+#                                legend.key.height=unit(0.5,'in'), # increase height of map legend key
+#                                legend.key.width=unit(0.5,'in'), # increase width of map legend key
+#                                axis.title.x=element_blank(), # remove axes, labels and background
+#                                axis.text.x=element_blank(), 
+#                                axis.ticks.x=element_blank(), 
+#                                axis.title.y=element_blank(), 
+#                                axis.text.y=element_blank(), 
+#                                axis.ticks.y=element_blank(), 
+#                                panel.grid.major=element_blank(), 
+#                                panel.grid.minor=element_blank(),
+#                                panel.background=element_blank())
+```
+
+<!--- Shiny ui --->
+
+```{r shiny_ui, echo=FALSE}
+library(shiny)
+library(shinyWidgets)
+
+ui <- fluidPage(
+  verticalLayout(
+    plotOutput('WorkingTimeMap'),
+    wellPanel(
+      noUiSliderInput(inputId='Year', label='Select a Year:', min=2000, max=2019, value=2000, step=1, format=wNumbFormat(decimals=0, mark='')) # make a slider to select a year for the map
+    )
+  )
+)
+server <- function(input, output) {
+  workDataMapReactive <- reactive({ # create a reactive dataset
+    if(!is.null(input$Year)) {
+      workDataMap %>% filter(`Year`==input$Year) -> workDataMap # filter for the inputted year
+    }
+    workDataMap
+  })
+  output$WorkingTimeMap <- renderPlot({
+    workDataMapReactive <- workDataMapReactive()
+    # create a map using ggplot::geom_polygon
+    worldBase + geom_polygon(data=workDataMapReactive, aes(x=`long`, y=`lat`, group=group, fill=`AvgHrsWorked`)) + 
+                             scale_fill_continuous(name='Average Annual Time\nSpent Working (hours)', low='blue', high='red', na.value='gray50',) + 
+                             labs(title='Average Annual Time Spent Working per Country') +
+                             theme(plot.title=element_text(size=20), # increase text size of map title
+                                   legend.title=element_text(size=16), # increase text size of map legend title
+                                   legend.text=element_text(size=14), # increase text size of map legend
+                                   legend.key.height=unit(0.5,'in'), # increase height of map legend key
+                                   legend.key.width=unit(0.5,'in'), # increase width of map legend key
+                                   axis.title.x=element_blank(), # remove axes, labels and background
+                                   axis.text.x=element_blank(), 
+                                   axis.ticks.x=element_blank(), 
+                                   axis.title.y=element_blank(), 
+                                   axis.text.y=element_blank(), 
+                                   axis.ticks.y=element_blank(), 
+                                   panel.grid.major=element_blank(), 
+                                   panel.grid.minor=element_blank(),
+                                   panel.background=element_blank())
+  })
+}
+shinyApp(ui=ui, server=server)
+```
+
+# Happiness
+
+By nature, happiness is very difficult to define, especially quantitatively, as it is very subjective. The [World Happiness Report](https://worldhappiness.report/) attempts to do just that. In this section of the article, we are going to take a look at [data](https://www.kaggle.com/mathurinache/world-happiness-report-20152021) from the World Happiness Report between 2015 and 2019. The World Happiness Report is a publication of the Sustainable Development Solutions Network and acquires its data from the [Gallup World Poll](https://www.gallup.com/corporate/212381/who-we-are.aspx) and [Lloyd's Register Foundation](https://www.lrfoundation.org.uk/en/) Risk Poll. It is written by an independent group of experts who act in their own capacities. A World Happiness Report has been created each year from 2012 to the present, the first one being created in support of the UN High Level meeting on happiness and well-being. Each year focuses on different aspects of life that are believed to affect happiness that year. For example, the COVID-19 pandemic was a major focus in the 2020 and 2021 World Happiness Reports. However, for the scope of this article, only data from 2015 to 2019 is being included to avoid any major differences in happiness due to the pandemic. In addition to a numerical overall happiness score, I will be exploring three other attributes that the report also focuses on which are related to happiness: freedom, healthy life expectancy and generosity. These three metrics as well as the overall happiness score will be explored in more detail below.
+
+## How is Happiness Defined?
+
+In the [first World Happiness Report in 2012](https://s3.amazonaws.com/happiness-report/2012/World_Happiness_Report_2012.pdf), the happiness index was defined as "the weighted (by sampling weights) rate of respondents reporting 'Very happy' or 'Quite happy' less the weighted rate of respondents reporting 'Not very happy' or 'Not at all happy,' plus 100." More recently, the World Happiness Reports have been using the terminology of a "happiness ladder," sometimes called the Cantril ladder. In the Gallup World Poll, approximately 1000 randomly selected respondents from over 150 countries evaluate the quality of their lives on an 11 point scale from 0 to 10 with 0 being the worst life possible and 10 best the best possible. All data found in the World Happiness Report is taken from individuals aged 15 and older as this is the only age group surveyed in the Gallup World Poll. The happiness index or score is then computed by averaging the ladder to a single number. This is the way that the happiness score is calculated in the data presented in this article for the years 2015 through 2019.
+
+## How Happy are Different Countries?
+
+The bar plot below shows the happiness index by country and over time between the years 2015 and 2019. As can be seen from the plot, similarly to time spent working bar plot above, the countries who have the highest happiness scores are generally found in Western Europe and Scandinavia. while the less happy are found in Central and Eastern Europe. It is important to note that the data from Western Europe is more representative of the spread in happiness scores as well as time spent working above due to countries from this region making up approximately half of the data here. Each bar is colored by the world region its corresponding country belongs to as specified in the legend to the right of the plot. Selecting each region in the legend will hide the bars for that region in the plot and double-clicking the region in the legend will isolate countries from that region in the plot. Hovering over each bar will also reveal the exact value of the happiness score for the corresponding country. Data for different years between 2015 and 2019 can be viewed using the slider or the play button below the plot.
+
+``` {r happinessPlot, echo=TRUE, message=FALSE, warning=FALSE, fig.width=12, fig.height=8}
+# bind happiness dataframes for each year into one dataframe 
+happinessData <- bind_rows(happinessData2015,
+                           happinessData2016, 
+                           happinessData2017, 
+                           happinessData2018, 
+                           happinessData2019)
+
+happinessData <- happinessData[order(happinessData$Happiness.Score),] # sort happinessData dataframe by Happiness.Score
+
+happinessPlot <- happinessData %>% 
+  plot_ly(
+    x=~`Happiness.Score`, # select x-axis data
+    y=~`Country`, # select y-axis data
+    color=~`Region`, # color each bar by the region corresponding to the country it represents
+    frame=~`Year`, # animate plot by year from 2015 to 2019
+    text=~paste(`Happiness.Score`), # allow the exact happiness score value to be identified when hovering over each bar
+    hoverinfo='text',
+    type='bar', # specify the type of plot
+    height=800, # specify the plot height so all country names are shown
+    orientation='h') %>% # specify horizontal orientation for the plot
+      layout(title='<b>Happiness Score per Country<b>',
+             xaxis=list(title='Overall Happiness Score'), # add title for x-axis
+             yaxis=list(title='', # y-axis has a blank title
+                        categoryarray=~`Happiness.Score`, 
+                        categoryorder='array'),
+             legend=list(title=list(text='<b>Region</b>'), # "<b>" is used to bold the text) 
+                         traceorder='reversed')) # reverse the legend's trace order to match the order of the bars
+happinessPlot
+```
+
+# Putting The Two Datasets Together
+
+Now that we have gained a better idea of how the data for time spent working per country and happiness per country is collected, measured and interpreted, we can begin to visually explore the relationships between the two datasets. Below are four different sections in which I explore how freedom, healthy life expectancy, generosity as well as the overall happiness score relate to average annual time spent working. 
+
+## Time Spent Working and Freedom
+
+The value for freedom is quantified by the World Happiness Report to "show the estimated extent to which [it is] estimated to contribute to making life evaluations higher in each country than [it is] in Dystopia, a hypothetical country that has a value equal to the world's lowest national average for [freedom]." Put more plainly, the freedom values measure how much freedom contributes to the happiness score of each country. The data for it comes from the Gallup World Poll question "Are you satisfied or dissatisfied with your freedom to choose what you do with your life?" As can be seen from the scatterplot below which plots average annual time spent working against freedom, there appears to be an inverse relationship between average annual time spent working and freedom. This means that the stronger a role freedom plays in the contribution to a country's happiness score, the less time is spent working in that country on average. As we saw in the bar plots for time spent working and happiness score above, Western European countries appear to spend the least time working annually and also appear to have freedom as a significant factor in determining their happiness score. There are a few outliers such as Mexico and Costa Rica where freedom and average annual time spent working do not appear to be very strongly correlated and they seem happy while still having one of the highest numbers for average time spent working annually. Conversely, countries such as Greece or Lithuania seem to have a lower value for average annual time spent working but have a low happiness score. Each point is colored by the world region its corresponding country belongs to as specified in the legend to the right of the plot and sized by its corresponding country's worldwide happiness rank. Hovering over each point will also reveal the exact value for average annual time spent working and freedom for the corresponding country. Selecting each region in the legend will hide the points for that region in the plot and double-clicking the region in the legend will isolate countries from that region in the plot. Data for different years between 2015 and 2019 can be viewed using the slider or the play button below the plot.
+
+``` {r freedomVSWorkingPlot, echo=TRUE, message=FALSE, warning=FALSE, fig.width=12, fig.height=8}
+freedomVSWorkingPlot <- workAndHappinessData %>%
+  plot_ly (
+    x=~`Freedom`, # select x-axis data
+    y=~`AvgHrsWorked`, # select y-axis data
+    size=~`Happiness.Rank`*-1, # size each point in the plot inversely by happiness rank,
+    marker=~list(sizeref=.03), # adjust relative sizes of each point in the plot
+    color=~`Region`, # color each point by the region corresponding to the country it represents
+    frame=~`Year`,# animate plot by year from 2015 to 2019
+    text=~paste(`Country`, ':', `AvgHrsWorked`, 'hrs, ', `Freedom`), # allow each country's values to be identified when hovering over each point
+    hoverinfo='text', 
+    type='scatter', # specify the type of plot
+    mode='markers', 
+    fill=' ') %>%
+      layout(title='<b>Average Annual Time Spent Working vs. Freedom<b>',
+             xaxis=list(title='Freedom'), # add titles for x and y-axes and the legend
+             yaxis=list(title='Average Annual Time Spent Working (hours)'),
+             legend=list(title=list(text='<b>Region</b>'), # "<b>" is used to bold the text) 
+                         traceorder='reversed')) # reverse the legend's trace order
+freedomVSWorkingPlot
+```
+
+## Time Spent Working and Healthy Life Expectancy
+
+Healthy Life expectancy is defined by the [World Health Organization (WHO)](https://www.who.int/data/gho/indicator-metadata-registry/imr-details/66) as the "average number of years that a person can expect to live in 'full health' by taking into account years lived in less than full health due to disease and/or injury." It is estimated by the all-cause years lost due to disability rate per capita, adjusted for independent comorbidity, by age, sex and country. This number is then taken and divided by a period life table cohort at different ages into years of equivalent full health and equivalent lost healthy years. The value used in the World Happiness Report is based on data from the [WHO Global Health Observatory data repository](https://apps.who.int/gho/data/node.main) on healthy life expectancy and the value included in the World Happiness report is the estimated amount that it contributes to the overall happiness score for a country. Similar to the scatterplot above with freedom vs. time spent working, healthy life expectancy is also generally inversely related although perhaps not as strongly. However, it still seems that average annual time spent working is loosely related to healthy life expectancy, meaning that countries in which healthy life expectancy accounts for a large portion of the overall happiness score also tend to spend less time working annually on average. There are no major outliers in this plot but the data points are more spread out. Each point is colored by the world region its corresponding country belongs to as specified in the legend to the right of the plot and sized by its corresponding country's worldwide happiness rank. Hovering over each point will also reveal the exact value for average annual time spent working and healthy life expectancy for the corresponding country. Selecting each region in the legend will hide the points for that region in the plot and double-clicking the region in the legend will isolate countries from that region in the plot.  Data for different years between 2015 and 2019 can be viewed using the slider or the play button below the plot.
+
+``` {r HLEVSWorkingPlot, echo=TRUE, message=FALSE, warning=FALSE, fig.width=12, fig.height=8}
+HLEVSWorkingPlot <- workAndHappinessData %>%
+  plot_ly (
+    x=~`Health..Life.Expectancy.`, # select x-axis data
+    y=~`AvgHrsWorked`, # select y-axis data
+    size=~`Happiness.Rank`*-1, # size each point in the plot inversely by happiness rank,
+    marker=~list(sizeref=.03), # adjust relative sizes of each point in the plot
+    color=~`Region`, # color each point by the region corresponding to the country it represents
+    frame=~`Year`,# animate plot by year from 2015 to 2019
+    text=~paste(`Country`, ':', `AvgHrsWorked`, 'hrs, ', `Health..Life.Expectancy.`), # allow each country's values to be identified when hovering over each point
+    hoverinfo='text', 
+    type='scatter', # specify the type of plot
+    mode='markers', 
+    fill=' ') %>%
+      layout(title='<b>Average Annual Time Spent Working vs. Healthy Life Expectancy<b>',
+             xaxis=list(title='Healthy Life Expectancy'), # add titles for x and y-axes and the legend
+             yaxis=list(title='Average Annual Time Spent Working (hours)'),
+             legend=list(title=list(text='<b>Region</b>'), # "<b>" is used to bold the text) 
+                         traceorder='reversed')) # reverse the legend's trace order
+HLEVSWorkingPlot
+```
+
+## Time Spent Working and Generosity
+
+The second chapter of the [2019 World Happiness Report](https://worldhappiness.report/ed/2019/changing-world-happiness/) explains that their measure of generosity is the residual of regressing the national average of Gallup World Poll responses to the question "Have you donated money to a charity in the past month?" on GDP per capita. Based on the scatterplot below, there seems to be an inverse relationship between generosity and average annual time spent working similar to the previous two plots. It seems the people in most countries are more generous as they spend less time working. There still seems to be a loose relation between generosity and average annual time spent working however. There are no major outliers here, but similar to the plot above with healthy life expectancy, the data points are again more spread out and even more so in this plot. Each point is colored by the world region its corresponding country belongs to as specified in the legend to the right of the plot and sized by its corresponding country's worldwide happiness rank. Hovering over each point will also reveal the exact value for average annual time spent working and generosity for the corresponding country. Selecting each region in the legend will hide the points for that region in the plot and double-clicking the region in the legend will isolate countries from that region in the plot. Data for different years between 2015 and 2019 can be viewed using the slider or the play button below the plot.
+
+``` {r generosityVSWorkingPlot, echo=TRUE, message=FALSE, warning=FALSE, fig.width=12, fig.height=8}
+generosityVSWorkingPlot <- workAndHappinessData %>%
+  plot_ly (
+    x=~`Generosity`, # select x-axis data
+    y=~`AvgHrsWorked`, # select y-axis data
+    size=~`Happiness.Rank`*-1, # size each point in the plot inversely by happiness rank,
+    marker=~list(sizeref=.03), # adjust relative sizes of each point in the plot
+    color=~`Region`, # color each point by the region corresponding to the country it represents
+    frame=~`Year`,# animate plot by year from 2015 to 2019
+    text=~paste(`Country`, ':', `AvgHrsWorked`, 'hrs, ', `Generosity`), # allow each country's values to be identified when hovering over each point
+    hoverinfo='text', 
+    type='scatter', # specify the type of plot
+    mode='markers', 
+    fill=' ') %>%
+      layout(title='<b>Average Annual Time Spent Working vs. Generosity<b>',
+             xaxis=list(title='Generosity'), # add titles for x and y-axes and the legend
+             yaxis=list(title='Average Annual Time Spent Working (hours)'),
+             legend=list(title=list(text='<b>Region</b>'), # "<b>" is used to bold the text) 
+                         traceorder='reversed')) # reverse the legend's trace order
+generosityVSWorkingPlot
+```
+
+## Time Spent Working and Overall Happiness Score
+
+Now that we have looked at three different factors that affect happiness and their relation to time spent working across different countries in the world, we can now finally compare time spent working to the overall happiness score for the 37 countries that we have investigated up to this point. We can see this in the scatterplot below, which plots average annual time spent working against the overall happiness score. Just as in the previous plots on freedom, healthy life expectancy and generosity, these two metrics seem to be inversely related, meaning that, according to this data, countries that work less tend to be happier. Not all countries from these data follow this trend, however. Some countries appear to work less but have lower happiness scores such as Hungary, Greece, Latvia or Portugal. Conversely there seem to be countries that work a great deal but still seem to be happy such as some Latin American and Caribbean countries including Costa Rica, Mexico or Chile. Similarly to the trends we have seen in the three previous scatterplots, the happiest countries generally tend to be found in Western Europe and Scandinavia, including countries such as Norway, Denmark, Finland or the Netherlands. As I stated above, it is important to note that about half of the countries being looked at are from Western Europe and therefore there is greater information present on the distribution of data for these different countries. While the happiest countries may be found in Western Europe, Greece is included in this region but has a significantly lower happiness score compared to its other Western Europe counterparts. Each point is colored by the world region its corresponding country belongs to as specified in the legend to the right of the plot and sized by its corresponding country's worldwide happiness rank. Hovering over each point will also reveal the exact value for average annual time spent working and overall happiness score for the corresponding country. Selecting each region in the legend will hide the points for that region in the plot and double-clicking the region in the legend will isolate countries from that region in the plot. Data for different years between 2015 and 2019 can be viewed using the slider or the play button below the plot.
+
+``` {r happinessVSWorkingPlot, echo=TRUE, message=FALSE, warning=FALSE, fig.width=12, fig.height=8}
+happinessVSWorkingPlot <- workAndHappinessData %>%
+  plot_ly (
+    x=~`Happiness.Score`, # select x-axis data
+    y=~`AvgHrsWorked`, # select y-axis data
+    size=~`Happiness.Rank`*-1, # size each point in the plot inversely by happiness rank,
+    marker=~list(sizeref=.03), # adjust relative sizes of each point in the plot
+    color=~`Region`, # color each point by the region corresponding to the country it represents
+    frame=~`Year`,# animate plot by year from 2015 to 2019
+    text=~paste(`Country`, ':', `AvgHrsWorked`, 'hrs, ', `Happiness.Score`), # allow each country's values to be identified when hovering over each point
+    hoverinfo='text', 
+    type='scatter', # specify the type of plot
+    mode='markers', 
+    fill=' ') %>%
+      layout(title='<b>Average Annual Time Spent Working vs. Overall Happiness Score<b>',
+             xaxis=list(title='Overall Happiness Score'), # add titles for x and y-axes and the legend
+             yaxis=list(title='Average Annual Time Spent Working (hours)'),
+             legend=list(title=list(text='<b>Region</b>'), # "<b>" is used to bold the text) 
+                         traceorder='reversed')) # reverse the legend's trace order 
+happinessVSWorkingPlot
+```
+
+# Conclusion
+
+So, how does working affect happiness? According to the data presented here, they appear to be inversely related: the less time a country spends working, the happier it appears to be. We first began by looking at the average annual time spent working by workers in each of the 37 countries of focus in these data and we learned how and where from that data is collected as well as how it is interpreted by the OECD. We were able to see these data on time spent working through both a bar plot and with a map. We then looked at happiness in the same countries around the world and were able to learn how the happiness index was made as well as how the data for it is collected. Using these from the World Happiness Reports from 2015 to 2019, we were able to see the happiness scores for each of the 37 countries of focus. We then put both datasets together and were able to explore how different factors that are estimated to affect happiness are related to average annual time spent working, namely freedom, healthy life expectancy and generosity. We also looked at a plot of time spent working against the overall happiness scores for each country and saw the inverse relationship the two factors appear to have. As a reminder, it should be noted that, since happiness is subjective and difficult to define, it is difficult to accurately predict which factors affect happiness. In this article, I explored only one factor that is likely to have a significant effect on happiness, but there are many more that could both positively and negatively affect happiness. Also, the source code for data ingest and cleaning as well as creation of all plots in this article is available using the `Code` buttons on the right side of this article. The `Code` drop-down menu at the top of this article also gives the option to show or hide all code chunks.
+
+# Resources
+
+## Data
+
+- [Organisation for Economic Co-operation and Development (OECD) Average Annual Hours Actually Worked per Worker](https://stats.oecd.org/index.aspx?DataSetCode=ANHRS)
+
+- [World Happiness Report 2015-2019 (Kaggle)](https://www.kaggle.com/mathurinache/world-happiness-report-20152021)
+
+## Reporting
+
+- [2017 World Happiness Report Chapter 6](https://s3.amazonaws.com/happiness-report/2017/HR17-Ch6_wAppendix.pdf)
+
+- [European Union Labour Force Survey (EU LFS)](https://ec.europa.eu/eurostat/web/microdata/european-union-labour-force-survey)
+
+- [International Labour Organization (ILO) Labour Force Surveys](https://www.ilo.org/dyn/lfsurvey/lfsurvey.list?p_lang=en)
+
+- [World Happiness Report FAQ](https://worldhappiness.report/faq/)
+
+- [2012 World Happiness Report](https://s3.amazonaws.com/happiness-report/2012/World_Happiness_Report_2012.pdf)
+
+- [The World Health Organization (WHO) - Healthy Life Expectancy at Birth](https://www.who.int/data/gho/indicator-metadata-registry/imr-details/66)
+
+- [The World Health Organization (WHO) Global Health Observatory Data Repository](https://apps.who.int/gho/data/node.main)
+
+- [2019 World Happiness Report Chapter 2](https://worldhappiness.report/ed/2019/changing-world-happiness/)
+
+## Coding
+
+- [Remove Duplicate Rows in Dataframe](https://www.datasciencemadesimple.com/remove-duplicate-rows-r-using-dplyr-distinct-function/)
+
+- [Bind Multiple Datasets into One](https://www.rdocumentation.org/packages/dplyr/versions/0.7.8/topics/bind)
+
+- [Change Column Order in a Dataframe](https://dplyr.tidyverse.org/reference/relocate.html)
+
+- [Remove Grid and Background from Plot (ggplot2)](https://felixfan.github.io/ggplot2-remove-grid-background-margin/)
+
+- [Increase Width of Entire HTML Rmarkdown](https://stackoverflow.com/questions/34906002/increase-width-of-entire-html-rmarkdown-output)
+
+- [Change Font for Author in HTML Rmarkdown Output](https://stackoverflow.com/questions/48958406/change-font-for-author-rmarkdown)
+
+- [Implement Shiny R Slider Input to filter Data from a Dataframe](https://stackoverflow.com/questions/40861908/shiny-r-implement-slider-input)
+
+- [Sorting a Dataframe in R](https://www.statmethods.net/management/sorting.html)
+
+- [noUiSliderInput Numeric Range Slider Shiny Widget](https://rdrr.io/github/dreamRs/shinyWidgets/man/noUiSliderInput.html)
+
+- [Reverse the Trace Order of a Plotly Plot](https://github.com/ropensci/plotly/issues/1395)

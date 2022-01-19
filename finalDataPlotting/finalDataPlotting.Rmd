@@ -1,0 +1,127 @@
+---
+title: "Final Data Plotting"
+author: "Adam Kippenhan"
+date: "05/11/2021"
+output: 
+  html_document:
+          toc: TRUE
+          toc_float: true
+          toc_collapsed: true
+          theme: journal
+---
+
+# Class 25
+
+## Exposition and Plot Description
+
+The data set used here is from Our World in Data on number of deaths by risk factor worldwide. Of these data, I selected the data for the United States and plotted the change in deaths due to air pollution over time.  I first read in the data from a CSV file and filtered it to select only data from the United States. For the plot, I made a time series plot of the yearly deaths due to air pollution in the United States between 1970 and 2017. It is interesting to see how deaths due to air pollution have increased since 1970 as emissions began to rise, but have begun to lower since then as the Untied States has introduced policies aimed at curbing climate change in more recent times. I also adjusted the scale of the x-axis to display years in increments of 5.
+
+## Code
+
+``` {r echo=TRUE, message=FALSE, warning=FALSE}
+library(tidyverse)
+
+# read in the "number-of-deaths-by-risk-factor.csv" and filter for data from the United States
+airPollutionData = read_csv('/Users/adam/Documents/School Files/University of Virginia/Second Year/Spring Semester/DS3003/finalProject/finalDataPlotting/number-of-deaths-by-risk-factor.csv') %>% filter(`Code`=="USA")
+
+# make a ggplot time series with the year on the x-axis and deaths by air pollution on the y-axis
+p1 <- ggplot() + geom_line(data=airPollutionData, aes(x=`Year`, y=`Deaths - Air pollution - Sex: Both - Age: All Ages (Number)`, group=1), color='#FF0000') +
+  # set the plot title and y-axis title
+  labs(title='Air Pollution Deaths in the United States between 1990 and 2017',
+       y='Deaths by Air Pollution') +
+  # adjust the frequency of the tick marks on the x-axis to every 5 years
+  scale_x_continuous(breaks=seq(1990, 2017, 5))
+```
+
+## Plot
+
+``` {r echo=FALSE, message=FALSE, warning=FALSE}
+p1 # display the plot
+```
+
+
+# Class 26
+
+## Exposition and Plot Description
+
+The data used here is from Kaggle where it was collected from the OECD. Of these data, I selected the data for the year 2011 as that was the most commonly occurring year in the data. The plot below shows the share of one person households in various different countries in 2011. To start, I first read in the data from the "one-person-households.csv" file and filtered for datapoints in the year 2011. I used Plotly to create a bar plot with one bar corresponding to each country's 2011 share of one-person households. I also changed the color of the bars to red, allowed each country's exact value to be identified and changed the plot height to 1000 so that all of the countries would fit. Using the layout function, I also created a title for the plot as well as the x and y axes.
+
+## Code
+
+``` {r echo=TRUE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(plotly)
+
+# read in the "one-person-households" CSV file and select data from the year 2011
+onePersonHouseholdData = read.csv('/Users/adam/Documents/School Files/University of Virginia/Second Year/Spring Semester/DS3003/finalProject/finalDataPlotting/one-person-households.csv') %>% filter(`Year`==2011)
+
+p2 <- onePersonHouseholdData %>% 
+  plot_ly(
+    x=~`Share.of.one.person.households`, # select x-axis data
+    y=~`Entity`, # select y-axis data
+    marker=list(color='#FF0000'),
+    text=~`Share.of.one.person.households`, # allow the exact share of one person households to be identified when hovering over each bar
+    hoverinfo='text',
+    type='bar', # specify the type of plot
+    height=1000) %>% # specify the plot height so all country names are shown
+      layout(title='Share of One Person Households in Different Countries in 2011',
+             xaxis=list(title='Share of One Person Households'), # add title for x-axis
+             yaxis=list(title='')) # add blank title for the y-axis
+```
+
+## Plot
+
+``` {r echo=FALSE, message=FALSE, warning=FALSE}
+p2 # display the plot
+```
+
+
+# Class 27
+
+## Exposition and Map Description
+
+The data used here is taken from Statistica and is about broadcasting payments received by various soccer teams in 2019 and 2020. Of these data, I selected the data for Liverpool Football Club and created a pie chart to represent the percentages of payments from different broadcasting sources it received. To create the the plot, I first created vectors to contain the data points as well as the different categories of income. I then divided each data point by the total to create a percentage. I then displayed the plot using a Plotly Pie Chart.
+
+## Code
+
+``` {r echo=TRUE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+
+# read in the "statistic_id240912_premier-league-broadcasting-payments-to-clubs-2019-20" excel file
+broadcastingData=readxl::read_excel('/Users/adam/Documents/School Files/University of Virginia/Second Year/Spring Semester/DS3003/finalProject/finalDataPlotting/statistic_id240912_premier-league-broadcasting-payments-to-clubs-2019-20.xlsx') 
+
+# create payment types vector
+broadcastingData[2,]  %>% select(-1) -> paymentTypes
+
+# convert to vector
+as.character(paymentTypes[1,]) -> paymentTypesVec
+
+# create data points vector
+broadcastingData %>% filter(`Premier League broadcasting payments to clubs 2019/20`== 'Liverpool FC') -> nums
+
+nums[-1] -> broadcastingVec
+
+# convert to vector
+as.numeric(broadcastingVec) -> broadcastingVec
+
+# create percentages by dividing each data point by the total
+broadcastingVec/sum(broadcastingVec) -> broadcastingVec
+
+# creata a pie chart using Plotly
+p3 <- plot_ly(broadcastingData, labels=~paymentTypesVec, values=~broadcastingVec, type='pie')
+p3 <- p3 %>% layout(title='Percentage of Broadcasting Payments Received by Liverpool FC in 2019/2020',
+         xaxis = list(showgrid=FALSE, zeroline=FALSE, showticklabels=FALSE),
+         yaxis = list(showgrid=FALSE, zeroline=FALSE, showticklabels=FALSE))
+```
+
+## Plot
+
+``` {r echo=FALSE, message=FALSE, warning=FALSE}
+p3 # display the map
+```
+
+
+
+
+
